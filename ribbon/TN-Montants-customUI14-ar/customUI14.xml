@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<customUI xmlns="http://schemas.microsoft.com/office/2009/07/customui">
+  <ribbon>
+    <tabs>
+      <tab id="TN34_Tab" label="المبالغ التونسية">
+        <group id="TN34_Group" label="تحويل المبالغ">
+          <button id="TN34_SelectedAmount"
+                  label="المبلغ المحدد"
+                  size="large"
+                  onAction="TN33_Ruban_MontantSelectionne"
+                  screentip="تحويل المبلغ المحدد"
+                  supertip="تحويل المبلغ التونسي المحدد إلى العربية القانونية مع الاحتفاظ بالقيمة الرقمية."/>
+          <button id="TN34_SelectedAmounts"
+                  label="مبالغ التحديد"
+                  size="large"
+                  onAction="TN33_Ruban_MontantsSelection"
+                  screentip="تحويل مبالغ التحديد"
+                  supertip="تحويل جميع المبالغ التونسية الموجودة داخل النص المحدد."/>
+          <button id="TN34_DocumentAmounts"
+                  label="جميع مبالغ الوثيقة"
+                  size="large"
+                  onAction="TN33_Ruban_MontantsDocument"
+                  screentip="تحويل جميع مبالغ الوثيقة"
+                  supertip="تحويل جميع المبالغ التونسية الموجودة في الوثيقة."/>
+        </group>
+      </tab>
+    </tabs>
+  </ribbon>
+</customUI>

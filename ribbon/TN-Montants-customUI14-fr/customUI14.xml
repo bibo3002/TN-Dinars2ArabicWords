@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<customUI xmlns="http://schemas.microsoft.com/office/2009/07/customui">
+  <ribbon>
+    <tabs>
+      <tab id="TN34_Tab" label="Montants tunisiens">
+        <group id="TN34_Group" label="Conversion des montants">
+
+          <button id="TN34_SelectedAmount"
+                  label="Montant sélectionné"
+                  size="large"
+                  imageMso="Calculator"
+                  onAction="TN33_Ruban_MontantSelectionne"
+                  screentip="Convertir le montant sélectionné"
+                  supertip="Convertit le montant tunisien sélectionné en toutes lettres en arabe juridique, tout en conservant la valeur numérique entre parenthèses."/>
+
+          <button id="TN34_SelectedAmounts"
+                  label="Montants de la sélection"
+                  size="large"
+                  imageMso="SelectAll"
+                  onAction="TN33_Ruban_MontantsSelection"
+                  screentip="Convertir les montants de la sélection"
+                  supertip="Convertit tous les montants tunisiens présents dans le texte sélectionné en arabe juridique."/>
+
+          <button id="TN34_DocumentAmounts"
+                  label="Tous les montants du document"
+                  size="large"
+                  imageMso="DocumentInspect"
+                  onAction="TN33_Ruban_MontantsDocument"
+                  screentip="Convertir tous les montants du document"
+                  supertip="Convertit tous les montants tunisiens présents dans le document en arabe juridique."/>
+
+        </group>
+      </tab>
+    </tabs>
+  </ribbon>
+</customUI>
