@@ -1,37 +1,111 @@
-Attribute VB_Name = "TN_Montants_Excel"
+Attribute VB_Name = "TN_Montants_Excel_V34_Complete"
 Option Explicit
 
-' TN-Montants V3.4 - Excel engine.
-' This module contains the non-Word conversion engine derived from V3.3.
-' It has no Word object dependencies.
+'====================================================================
+' TN-Montants Excel V3.4
 '
-' Worksheet formula:
-'     =TN_Montant(B2)
+' Noyau linguistique directement dérivé de TN_Montants_V33.
+' Seule la couche d'entrée Word est remplacée par une couche Excel.
 '
+' Utilisation :
+'     =TN_Montant(A1)
+'
+' Le résultat conserve la valeur normalisée entre parenthèses :
+'     2474,273
+'     -> ألفان وأربعمائة وأربعة وسبعون دينارا ومائتان وثلاثة
+'        وسبعون مليما (2474.273 د)
+'
+' Entrées prises en charge :
+' - valeur numérique Excel, y compris résultat de formule ;
+' - texte avec chiffres occidentaux ;
+' - chiffres arabes ٠١٢٣٤٥٦٧٨٩ ;
+' - chiffres persans ۰۱۲۳۴۵۶۷۸۹ ;
+' - . , et ٫ comme séparateurs décimaux ;
+' - espaces / séparateurs de milliers.
+'
+' Limite : 999 999 999.999
+'====================================================================
+
+Private Const TN34X_VERSION As String = "3.4"
+
+'====================================================================
+' API PUBLIQUE EXCEL
+'====================================================================
+
 Public Function TN_Montant(ByVal valeur As Variant) As String
-    Dim source As String
     Dim montant As String
+
+    On Error GoTo GestionErreur
 
     If IsError(valeur) Then Exit Function
     If IsEmpty(valeur) Then Exit Function
 
-    source = Trim$(CStr(valeur))
-    If source = "" Then Exit Function
-
-    montant = TN34X_ExtraireMontant(source)
-    If montant = "" Then
-        ' Excel numeric cells can arrive as 2523.551 depending on locale.
-        ' Try the normalized text directly as a fallback.
-        montant = TN34X_NormaliserNombre(source)
+    If TN34X_EstValeurNumerique(valeur) Then
+        montant = TN34X_NormaliserValeurNumerique(CDbl(valeur))
+    Else
+        montant = TN34X_ExtraireMontant(CStr(valeur))
     End If
 
     If montant = "" Then Exit Function
+
     TN_Montant = TN34X_ConstruireMontant(montant)
+    Exit Function
+
+GestionErreur:
+    TN_Montant = ""
 End Function
 
 Public Function TN_MontantNombre(ByVal valeur As Variant) As String
     TN_MontantNombre = TN_Montant(valeur)
 End Function
+
+' Test direct du noyau, utile pour les tests VBA.
+Public Function TN_MontantTexte(ByVal texte As String) As String
+    TN_MontantTexte = TN_Montant(texte)
+End Function
+
+'====================================================================
+' COUCHE D'ENTREE EXCEL : VALEURS NUMERIQUES
+'====================================================================
+
+Private Function TN34X_EstValeurNumerique(ByVal valeur As Variant) As Boolean
+    Select Case VarType(valeur)
+        Case vbByte, vbInteger, vbLong, vbSingle, vbDouble, vbCurrency, vbDecimal
+            TN34X_EstValeurNumerique = True
+    End Select
+End Function
+
+Private Function TN34X_NormaliserValeurNumerique(ByVal valeur As Double) As String
+    Dim entier As Double
+    Dim millimes As Long
+    Dim sEntier As String
+    Dim sMillimes As String
+
+    If valeur < 0 Then Exit Function
+    If valeur > 999999999.9995 Then Exit Function
+
+    ' Même logique de séparation que Number2Text :
+    ' partie entière + trois décimales.
+    entier = Fix(valeur)
+    millimes = CLng(Round((valeur - entier) * 1000, 0))
+
+    ' Protection contre le cas limite 999.999999...
+    If millimes >= 1000 Then
+        entier = entier + 1
+        millimes = 0
+    End If
+
+    If entier > 999999999 Then Exit Function
+
+    sEntier = Format$(entier, "0")
+    sMillimes = Format$(millimes, "000")
+
+    TN34X_NormaliserValeurNumerique = sEntier & "." & sMillimes
+End Function
+
+'====================================================================
+' EXTRACTION / NORMALISATION TEXTE
+'====================================================================
 
 Private Function TN34X_ExtraireMontant(ByVal source As String) As String
     Dim i As Long
@@ -54,6 +128,7 @@ Private Function TN34X_ExtraireMontant(ByVal source As String) As String
 
     Do While i <= Len(source)
         ch = Mid$(source, i, 1)
+
         If TN34X_EstCaractereNombre(ch) Then
             i = i + 1
         Else
@@ -62,6 +137,7 @@ Private Function TN34X_ExtraireMontant(ByVal source As String) As String
     Loop
 
     finNombre = i - 1
+
     Do While finNombre >= debutNombre
         If TN34X_EstEspace(Mid$(source, finNombre, 1)) Then
             finNombre = finNombre - 1
@@ -76,6 +152,16 @@ Private Function TN34X_ExtraireMontant(ByVal source As String) As String
         Mid$(source, debutNombre, finNombre - debutNombre + 1))
 End Function
 
+Private Function TN34X_NettoyerTexte(ByVal s As String) As String
+    s = Replace(s, Chr$(7), "")
+    s = Replace(s, vbCr, "")
+    s = Replace(s, vbLf, "")
+    s = Replace(s, vbTab, " ")
+    s = Replace(s, ChrW(160), " ")
+    s = Replace(s, ChrW(8239), " ")
+    TN34X_NettoyerTexte = Trim$(s)
+End Function
+
 Private Function TN34X_NormaliserNombre(ByVal source As String) As String
     Dim i As Long
     Dim ch As String
@@ -85,12 +171,10 @@ Private Function TN34X_NormaliserNombre(ByVal source As String) As String
     Dim nbApres As Long
     Dim entier As String
     Dim decimales As String
-    Dim separateur As String
 
     source = Trim$(source)
     If source = "" Then Exit Function
 
-    ' Conserver uniquement chiffres et separateurs numeriques autorises.
     For i = 1 To Len(source)
         ch = Mid$(source, i, 1)
         chiffre = TN34X_ChiffreOccidental(ch)
@@ -100,7 +184,7 @@ Private Function TN34X_NormaliserNombre(ByVal source As String) As String
         ElseIf ch = "." Or ch = "," Or ch = TN34X_U("1643") Then
             brut = brut & ch
         ElseIf TN34X_EstEspace(ch) Or ch = TN34X_U("1644") Then
-            ' espace ou separateur de milliers arabe : ignore
+            ' Séparateur de milliers : ignoré.
         Else
             Exit Function
         End If
@@ -108,16 +192,18 @@ Private Function TN34X_NormaliserNombre(ByVal source As String) As String
 
     If brut = "" Then Exit Function
 
-    ' Le dernier . , ou separateur decimal arabe est considere decimal
-    ' uniquement s'il est suivi de 1 a 3 chiffres.
+    ' Reprise exacte de la règle V3.3 :
+    ' le dernier séparateur est décimal s'il est suivi de 1 à 3 chiffres.
     For i = Len(brut) To 1 Step -1
         ch = Mid$(brut, i, 1)
+
         If ch = "." Or ch = "," Or ch = TN34X_U("1643") Then
             nbApres = Len(brut) - i
+
             If nbApres >= 1 And nbApres <= 3 Then
                 posDecimal = i
-                separateur = ch
             End If
+
             Exit For
         End If
     Next i
@@ -130,13 +216,13 @@ Private Function TN34X_NormaliserNombre(ByVal source As String) As String
         decimales = ""
     End If
 
-    ' Les separateurs restants dans la partie entiere sont des milliers.
     entier = Replace(entier, ".", "")
     entier = Replace(entier, ",", "")
     entier = Replace(entier, TN34X_U("1643"), "")
 
     If entier = "" Then Exit Function
     If Not TN34X_ChaineChiffres(entier) Then Exit Function
+
     If decimales <> "" Then
         If Not TN34X_ChaineChiffres(decimales) Then Exit Function
     End If
@@ -180,7 +266,7 @@ Private Function TN34X_EstCaractereNombre(ByVal ch As String) As Boolean
 End Function
 
 Private Function TN34X_EstEspace(ByVal ch As String) As Boolean
-    If ch = " " Or ch = ChrW(160) Or ch = vbTab Then
+    If ch = " " Or ch = ChrW(160) Or ch = ChrW(8239) Or ch = vbTab Then
         TN34X_EstEspace = True
     End If
 End Function
@@ -246,8 +332,8 @@ Private Function TN34X_ConstruireMontant(ByVal montant As String) As String
     End If
 
     TN34X_ConstruireMontant = resultat & " (" & _
-                             TN34X_FormaterMontant(montant) & _
-                             " " & TN34X_Devise() & ")"
+                              TN34X_FormaterMontant(montant) & _
+                              ChrW(160) & TN34X_Devise() & ")"
 End Function
 
 Private Function TN34X_PhraseDinars(ByVal n As Long) As String
@@ -302,17 +388,24 @@ Private Function TN34X_PhraseMonetaire( _
     End If
 
     If milliers > 0 Then
-        If resultat <> "" Then resultat = resultat & TN34X_Wa()
+        If resultat <> "" Then
+            resultat = resultat & TN34X_Wa()
+        End If
+
         aUneSuite = (reste > 0)
         resultat = resultat & TN34X_EchelleMilliers(milliers, aUneSuite)
     End If
 
     If reste > 0 Then
-        If resultat <> "" Then resultat = resultat & TN34X_Wa()
+        If resultat <> "" Then
+            resultat = resultat & TN34X_Wa()
+        End If
+
         resultat = resultat & TN34X_PhraseSousMilleMonetaire( _
             reste, singulier, formeUn, formeDeux, pluriel, accusatif)
     Else
-        resultat = TN34X_AjouterNomApresEchelle(resultat, singulier, milliers, millions)
+        resultat = TN34X_AjouterNomApresEchelle( _
+            resultat, singulier, milliers, millions)
     End If
 
     TN34X_PhraseMonetaire = resultat
@@ -324,8 +417,6 @@ Private Function TN34X_AjouterNomApresEchelle( _
     ByVal milliers As Long, _
     ByVal millions As Long) As String
 
-    ' Les formes duales d'echelle exactes sont deja mises au construit :
-    ' 2000 -> "alfa dinar", 2 000 000 -> "milyouna dinar".
     TN34X_AjouterNomApresEchelle = resultat & " " & singulier
 End Function
 
@@ -368,23 +459,23 @@ Private Function TN34X_PhraseSousMilleMonetaire( _
 
     If deuxDerniers >= 3 And deuxDerniers <= 10 Then
         TN34X_PhraseSousMilleMonetaire = TN34X_NombreSousMille(n) & _
-                                        " " & pluriel
+                                         " " & pluriel
         Exit Function
     End If
 
     If deuxDerniers = 0 Then
         If n = 200 Then
-            TN34X_PhraseSousMilleMonetaire = TN34X_W("hundredDualConstruct") & _
-                                            " " & singulier
+            TN34X_PhraseSousMilleMonetaire = _
+                TN34X_W("hundredDualConstruct") & " " & singulier
         Else
-            TN34X_PhraseSousMilleMonetaire = TN34X_NombreSousMille(n) & _
-                                            " " & singulier
+            TN34X_PhraseSousMilleMonetaire = _
+                TN34X_NombreSousMille(n) & " " & singulier
         End If
         Exit Function
     End If
 
     TN34X_PhraseSousMilleMonetaire = TN34X_NombreSousMille(n) & _
-                                    " " & accusatif
+                                     " " & accusatif
 End Function
 
 '====================================================================
@@ -412,6 +503,7 @@ Private Function TN34X_EchelleMilliers( _
 
         Case Else
             TN34X_EchelleMilliers = TN34X_NombreSousMille(n) & " "
+
             If avecSuite Then
                 TN34X_EchelleMilliers = TN34X_EchelleMilliers & _
                                         TN34X_W("thousandAccusative")
@@ -443,6 +535,7 @@ Private Function TN34X_EchelleMillions( _
 
         Case Else
             TN34X_EchelleMillions = TN34X_NombreSousMille(n) & " "
+
             If avecSuite Then
                 TN34X_EchelleMillions = TN34X_EchelleMillions & _
                                         TN34X_W("millionAccusative")
@@ -467,6 +560,7 @@ Private Function TN34X_NombreSousMille(ByVal n As Long) As String
 
     centaines = n \ 100
     reste = n Mod 100
+
     resultat = TN34X_CentainesSeules(centaines, False)
 
     If reste > 0 Then
@@ -483,24 +577,32 @@ Private Function TN34X_CentainesSeules( _
     Select Case centaines
         Case 1
             TN34X_CentainesSeules = TN34X_W("hundred")
+
         Case 2
             If formeConstruite Then
                 TN34X_CentainesSeules = TN34X_W("hundredDualConstruct")
             Else
                 TN34X_CentainesSeules = TN34X_W("hundredDual")
             End If
+
         Case 3
             TN34X_CentainesSeules = TN34X_W("threeHundred")
+
         Case 4
             TN34X_CentainesSeules = TN34X_W("fourHundred")
+
         Case 5
             TN34X_CentainesSeules = TN34X_W("fiveHundred")
+
         Case 6
             TN34X_CentainesSeules = TN34X_W("sixHundred")
+
         Case 7
             TN34X_CentainesSeules = TN34X_W("sevenHundred")
+
         Case 8
             TN34X_CentainesSeules = TN34X_W("eightHundred")
+
         Case 9
             TN34X_CentainesSeules = TN34X_W("nineHundred")
     End Select
@@ -529,8 +631,8 @@ Private Function TN34X_NombreSousCent(ByVal n As Long) As String
         TN34X_NombreSousCent = TN34X_MotDizaine(valeurDizaine)
     Else
         TN34X_NombreSousCent = TN34X_MotUnite(valeurUnite) & _
-                             TN34X_Wa() & _
-                             TN34X_MotDizaine(valeurDizaine)
+                               TN34X_Wa() & _
+                               TN34X_MotDizaine(valeurDizaine)
     End If
 End Function
 
@@ -577,7 +679,7 @@ Private Function TN34X_MotDizaine(ByVal n As Long) As String
 End Function
 
 '====================================================================
-' DICTIONNAIRE ARABE EN UNICODE
+' DICTIONNAIRE ARABE - identique au moteur V3.3
 '====================================================================
 
 Private Function TN34X_W(ByVal nom As String) As String
@@ -671,7 +773,7 @@ Private Function TN34X_Devise() As String
 End Function
 
 '====================================================================
-' UTILITAIRES WORD ET FORMATAGE
+' FORMATAGE
 '====================================================================
 
 Private Function TN34X_FormaterMontant(ByVal montant As String) As String
@@ -694,3 +796,46 @@ Private Function TN34X_FormaterMontant(ByVal montant As String) As String
 End Function
 
 Private Function TN34X_SupprimerZeros(ByVal s As String) As String
+    Do While Len(s) > 1 And Left$(s, 1) = "0"
+        s = Mid$(s, 2)
+    Loop
+
+    TN34X_SupprimerZeros = s
+End Function
+
+'====================================================================
+' TESTS RAPIDES EXCEL
+'====================================================================
+
+Public Sub TN34X_TesterExemples()
+    Debug.Print String$(78, "=")
+    Debug.Print "TN-Montants Excel V" & TN34X_VERSION
+    Debug.Print String$(78, "=")
+
+    Debug.Print "0.000       -> "; TN_Montant(0#)
+    Debug.Print "1.000       -> "; TN_Montant(1#)
+    Debug.Print "2.000       -> "; TN_Montant(2#)
+    Debug.Print "6.009       -> "; TN_Montant(6.009)
+    Debug.Print "33.104      -> "; TN_Montant(33.104)
+    Debug.Print "933.368     -> "; TN_Montant(933.368)
+    Debug.Print "2474.273    -> "; TN_Montant(2474.273)
+    Debug.Print "2523.551    -> "; TN_Montant(2523.551)
+    Debug.Print "2983.752    -> "; TN_Montant(2983.752)
+    Debug.Print "3150.000    -> "; TN_Montant(3150#)
+    Debug.Print "6800.365    -> "; TN_Montant(6800.365)
+    Debug.Print "10004.585   -> "; TN_Montant(10004.585)
+    Debug.Print "11429.223   -> "; TN_Montant(11429.223)
+    Debug.Print "12620.405   -> "; TN_Montant(12620.405)
+    Debug.Print "160426.591  -> "; TN_Montant(160426.591)
+    Debug.Print "29691.285   -> "; TN_Montant(29691.285)
+    Debug.Print "34001.824   -> "; TN_Montant(34001.824)
+
+    Debug.Print String$(78, "=")
+End Sub
+
+Public Sub TN34X_TesterTexte()
+    Debug.Print "Texte 2474,273 -> "; TN_MontantTexte("2474,273")
+    Debug.Print "Texte 2 474,273 -> "; TN_MontantTexte("2 474,273")
+    Debug.Print "Texte 2474.273 -> "; TN_MontantTexte("2474.273")
+    Debug.Print "Texte arabe -> "; TN_MontantTexte("٢٤٧٤٫٢٧٣")
+End Sub
