@@ -1,0 +1,13 @@
+introduire l'espace insécable avant د)
+
+
+
+remplacer
+
+ د\)
+ 
+ 
+Par
+
+
+\x{A0}د\)

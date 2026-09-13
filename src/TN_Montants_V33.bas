@@ -1036,3 +1036,11 @@ End Sub
 Private Sub TN33_TesterMontant(ByVal montant As String)
     Debug.Print montant & " -> " & TN33_ConstruireMontant(montant)
 End Sub
+
+'====================================================================
+' INTERFACE PUBLIQUE POUR LA SUITE DE REGRESSION
+'====================================================================
+
+Public Function TN33_ConvertirPourTest(ByVal montant As String) As String
+    TN33_ConvertirPourTest = TN33_ConstruireMontant(montant)
+End Function

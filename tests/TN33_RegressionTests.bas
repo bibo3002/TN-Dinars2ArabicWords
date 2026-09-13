@@ -61,7 +61,7 @@ Public Sub TN33_RunRegressionTestsFromFile(ByVal csvPath As String)
                         expected = CStr(fields(2))
 
                         total = total + 1
-                        result = TN33_ConstruireMontant(inputValue)
+                        result = TN33_ConvertirPourTest(inputValue)
 
                         If result = expected Then
                             passed = passed + 1
